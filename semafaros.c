@@ -13,7 +13,7 @@ void cortarCabelo(){
 	xSemaphoreGive(mCortando);
   Serial.println("Cortando Cabelo");
   vTaskDelay(5000 / portTICK_PERIOD_MS);
-  Serial.println("Acabou de cortar o cabelo");]
+  Serial.println("Acabou de cortar o cabelo");
 	xSemaphoreTake(mCortando, portMAX_DELAY);
   cortando = 0;
 	xSemaphoreGive(mCortando);
@@ -37,7 +37,7 @@ static void cliente(void* params){
   while(true){
     Serial.println("Cliente -> Chegou");
 		xSemaphoreTake(mCortando, portMAX_DELAY);
-		temp = cortando;
+		int temp = cortando;
 		xSemaphoreGive(mCortando);
     if(temp == 0){
 		  Serial.println("Cliente -> Acordando o barbeiro");
