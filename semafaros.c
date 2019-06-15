@@ -3,52 +3,56 @@
 
 SemaphoreHandle_t mBarbeiro;
 SemaphoreHandle_t mCortando;
-SemaphoreHandle_t mCliente;
+SemaphoreHandle_t mCadeiras;
 
-int cortando = 0;
+void vPrintString(const char *pcString){
+	vTaskSuspendAll();
+	{
+      Serial.println(pcString);
+      Serial.flush();
+	}
+	xTaskResumeAll();
+	if(Serial.available()){
+		vTaskEndScheduler();
+	}
+}
 
 void cortarCabelo(){
-	xSemaphoreTake(mCortando, portMAX_DELAY);
-  cortando = 1;
-	xSemaphoreGive(mCortando);
-  Serial.println("Cortando Cabelo");
+  vPrintString("Cortando Cabelo");
   vTaskDelay(5000 / portTICK_PERIOD_MS);
-  Serial.println("Acabou de cortar o cabelo");
-	xSemaphoreTake(mCortando, portMAX_DELAY);
-  cortando = 0;
-	xSemaphoreGive(mCortando);
+  vPrintString("Acabou de cortar o cabelo");
 }
 
 
 static void barbeiro(void* params){
   while(true){
-  	xSemaphoreTake(mBarbeiro, portMAX_DELAY);
-    if(xSemaphoreGive(mCliente) == pdPASS){
-      cortarCabelo();
-    }else{
-      Serial.println("Barbeiro -> Barbeiro dormindo");
-      xSemaphoreTake(mBarbeiro, portMAX_DELAY);
-    }
-  	xSemaphoreGive(mBarbeiro);
-  }
+		xSemaphoreTake(mCortando, portMAX_DELAY);
+			while(uxSemaphoreGetCount(mCadeiras) < 2){
+				cortarCabelo();
+				xSemaphoreGive(mCadeiras);
+			}
+		xSemaphoreGive(mCortando);
+		vPrintString("Indo dormir");
+		xSemaphoreTake(mBarbeiro, portMAX_DELAY);
+	}
 }
 
 static void cliente(void* params){
   while(true){
-    Serial.println("Cliente -> Chegou");
-		xSemaphoreTake(mCortando, portMAX_DELAY);
-		int temp = cortando;
-		xSemaphoreGive(mCortando);
-    if(temp == 0){
-		  Serial.println("Cliente -> Acordando o barbeiro");
-		  xSemaphoreTake(mCliente, 0);
-		  xSemaphoreGive(mBarbeiro);
-    }else if(xSemaphoreTake(mCliente, 0) == pdPASS){
-      Serial.println("Cliente -> Sala de espera");
-    }else{
-      Serial.println("Cliente -> Falou troxa");
-    }
-    vTaskDelay(random(10000) / portTICK_PERIOD_MS);
+		vTaskDelay(random(5000, 10000) / portTICK_PERIOD_MS);
+		if(xSemaphoreTake(mCortando, 0) == pdFAIL){
+			if(uxSemaphoreGetCount(mCadeiras) > 0){
+				vPrintString("Cliente-> Fila!");
+				xSemaphoreTake(mCadeiras, portMAX_DELAY);
+			}else{
+				vPrintString("Cliente-> Foi embora!");				
+			}
+		}else{
+			xSemaphoreGive(mCortando);
+			vPrintString("Cliente-> Acordando o barbeiro!");
+			xSemaphoreTake(mCadeiras, portMAX_DELAY);
+			xSemaphoreGive(mBarbeiro);
+		}
   }
 }
 
@@ -56,10 +60,12 @@ void setup(){
   Serial.begin(9600);
   mBarbeiro = xSemaphoreCreateBinary();
 	mCortando = xSemaphoreCreateMutex();
-  mCliente = xSemaphoreCreateCounting(3, 3);
+  mCadeiras = xSemaphoreCreateCounting(2, 2);
 
-  xTaskCreate(cliente, "Cliente", 100, NULL, 1, NULL);
-  xTaskCreate(barbeiro, "Barbeiro", 100, NULL, 1, NULL);
+  xTaskCreate(barbeiro, "Barbeiro", 100, NULL, 2, NULL);
+  xTaskCreate(cliente, "Cliente1", 100, NULL, 1, NULL);
+	xTaskCreate(cliente, "Cliente2", 100, NULL, 1, NULL);
+	xTaskCreate(cliente, "Cliente3", 100, NULL, 1, NULL);
   vTaskStartScheduler();
   for(;;);
 }
