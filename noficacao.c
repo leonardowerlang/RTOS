@@ -1,40 +1,56 @@
 #include <Arduino_FreeRTOS.h>
+#include "semphr.h"
 
 TaskHandle_t nClientes;
-int clientes = 0;
+SemaphoreHandle_t mCadeiras;
+
+void vPrintString(const char *pcString){
+	vTaskSuspendAll();
+	{
+      Serial.println(pcString);
+      Serial.flush();
+	}
+	xTaskResumeAll();
+	if(Serial.available()){
+		vTaskEndScheduler();
+	}
+}
 
 void cortarCabelo(){
-  Serial.println("Cortando Cabelo");
+  vPrintString("Cortando Cabelo");
   vTaskDelay(5000 / portTICK_PERIOD_MS);
-  Serial.println("Acabou de cortar o cabelo");
+  vPrintString("Acabou de cortar o cabelo");
 }
 
 static void barbeiro(void* params){
   while(true){
-  	clientes = ulTaskNotifyTake(pdFALSE, portMAX_DELAY) - 1;
+  	ulTaskNotifyTake(pdFALSE, portMAX_DELAY);
     cortarCabelo();
+    xSemaphoreGive(mCadeiras);
   }
 }
 
 static void cliente(void* params){
   while(true){
-		Serial.println("Cliente -> Chegou");
-		clientes++;
-		Serial.println(clientes);
-    if(clientes <= 3){
+    vTaskDelay(random(2000, 7500) / portTICK_PERIOD_MS);
+    if(uxSemaphoreGetCount(mCadeiras) > 0){
+      vPrintString("Cliente-> Fila!");
       xTaskNotifyGive(nClientes);
+      xSemaphoreTake(mCadeiras, portMAX_DELAY);
     }else{
-      Serial.println("Cliente -> Falou troxa");
+      vPrintString("Cliente-> Foi embora");
     }
-    vTaskDelay(random(10000) / portTICK_PERIOD_MS);
   }
 }
 
 void setup(){
   Serial.begin(9600);
+  mCadeiras = xSemaphoreCreateCounting(2, 2);
 
+  xTaskCreate(barbeiro, "Barbeiro", 100, NULL, 2, &nClientes);
   xTaskCreate(cliente, "Cliente", 100, NULL, 1, NULL);
-  xTaskCreate(barbeiro, "Barbeiro", 100, NULL, 1, &nClientes);
+  xTaskCreate(cliente, "Cliente", 100, NULL, 1, NULL);
+  xTaskCreate(cliente, "Cliente", 100, NULL, 1, NULL);
   vTaskStartScheduler();
   for(;;);
 }
